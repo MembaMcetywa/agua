@@ -7,7 +7,7 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import * as THREE from 'three';
 
 const sceneContainer = ref(null);
-let scene, camera, renderer, plane, geometry;
+let scene, camera, renderer, plane, geometry, pointLight, ambientLight;
 
 const init = () => {
     // Scene
@@ -25,12 +25,31 @@ const init = () => {
     // Geometry
     geometry = new THREE.PlaneGeometry(150, 150, 50, 50);
 
+    // Load texture
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load('https://threejs.org/examples/textures/water.jpg');
+
     // Material
-    const material = new THREE.MeshBasicMaterial({ color: 0x45728d, wireframe: true });
+    const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        displacementMap: texture,
+        displacementScale: 10,
+        metalness: 0.5,
+        roughness: 0.5,
+        wireframe: false,
+    });
 
     // Mesh
     plane = new THREE.Mesh(geometry, material);
     scene.add(plane);
+
+    // Lighting
+    pointLight = new THREE.PointLight(0xffffff, 1);
+    pointLight.position.set(50, 50, 50);
+    scene.add(pointLight);
+
+    ambientLight = new THREE.AmbientLight(0x404040, 2); 
+    scene.add(ambientLight);
 
     // Resize event
     window.addEventListener('resize', onWindowResize, false);
@@ -51,6 +70,10 @@ const animate = () => {
     }
 
     positionAttribute.needsUpdate = true;
+
+    // Rotate the plane for a dynamic effect
+    plane.rotation.z += 0.001;
+
     renderer.render(scene, camera);
 };
 
