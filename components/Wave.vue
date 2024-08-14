@@ -7,7 +7,8 @@ import { ref, onMounted, onBeforeUnmount } from 'vue';
 import * as THREE from 'three';
 
 const sceneContainer = ref(null);
-let scene, camera, renderer, plane, geometry, pointLight, ambientLight;
+const isMorphingToSecondShape = ref(true);
+let scene, camera, renderer, plane, geometry1, geometry2, lerpAmount = 0;
 
 const init = () => {
     // Scene
@@ -21,55 +22,65 @@ const init = () => {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     sceneContainer.value.appendChild(renderer.domElement);
+    //shapes
+    geometry1 = new THREE.PlaneGeometry(150, 150, 50, 50);
+    geometry2 = new THREE.PlaneGeometry(150, 150, 50, 50);
 
-    // Geometry
-    geometry = new THREE.PlaneGeometry(150, 150, 50, 50);
+    const positionAttribute2 = geometry2.attributes.position;
+    for (let i = 0; i < positionAttribute2.count; i++) {
+        const x = positionAttribute2.getX(i);
+        const y = positionAttribute2.getY(i);
+        const z = Math.sin(x * 0.2) * 5 + Math.sin(y * 0.2) * 5;
+        positionAttribute2.setZ(i, z);
+    }
 
-    // Load texture
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load('https://threejs.org/examples/textures/water.jpg');
-
-    // Material
-    const material = new THREE.MeshStandardMaterial({
-        map: texture,
-        displacementMap: texture,
+    plane = new THREE.Mesh(geometry1, new THREE.MeshStandardMaterial({
+        map: new THREE.TextureLoader().load('https://threejs.org/examples/textures/water.jpg'),
+        displacementMap: new THREE.TextureLoader().load('https://threejs.org/examples/textures/water.jpg'),
         displacementScale: 10,
         metalness: 0.5,
         roughness: 0.5,
-        wireframe: false,
-    });
+    }));
 
-    // Mesh
-    plane = new THREE.Mesh(geometry, material);
     scene.add(plane);
 
     // Lighting
-    pointLight = new THREE.PointLight(0xffffff, 1);
+    const pointLight = new THREE.PointLight(0xffffff, 1);
     pointLight.position.set(50, 50, 50);
     scene.add(pointLight);
 
-    ambientLight = new THREE.AmbientLight(0x404040, 2); 
+    const ambientLight = new THREE.AmbientLight(0x404040, 2);
     scene.add(ambientLight);
 
     // Resize event
     window.addEventListener('resize', onWindowResize, false);
+
+    
+    setInterval(() => {
+        isMorphingToSecondShape.value = !isMorphingToSecondShape.value;
+        lerpAmount = 0;
+    }, 5000);
 };
 
 const animate = () => {
     requestAnimationFrame(animate);
 
-    // Animate vertices
-    const time = Date.now() * 0.001;
-    const positionAttribute = geometry.attributes.position;
+    const positionAttribute1 = geometry1.attributes.position;
+    const positionAttribute2 = geometry2.attributes.position;
+    const positionAttributeCurrent = plane.geometry.attributes.position;
 
-    for (let i = 0; i < positionAttribute.count; i++) {
-        const x = positionAttribute.getX(i);
-        const y = positionAttribute.getY(i);
-        const z = Math.sin(x * 0.5 + time) * 2 + Math.sin(y * 0.5 + time) * 2;
-        positionAttribute.setZ(i, z);
+    for (let i = 0; i < positionAttributeCurrent.count; i++) {
+        const z1 = positionAttribute1.getZ(i);
+        const z2 = positionAttribute2.getZ(i);
+        const zCurrent = THREE.MathUtils.lerp(z1, z2, lerpAmount);
+
+        positionAttributeCurrent.setZ(i, zCurrent);
     }
 
-    positionAttribute.needsUpdate = true;
+    lerpAmount += 0.01;
+    if (lerpAmount >= 1) lerpAmount = 1; 
+
+    positionAttributeCurrent.needsUpdate = true;
 
     // Rotate the plane for a dynamic effect
     plane.rotation.z += 0.001;
