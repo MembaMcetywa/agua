@@ -6,9 +6,37 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import * as THREE from 'three';
 
+const audio = ref(null);
 const sceneContainer = ref(null);
 const isMorphingToSecondShape = ref(true);
 let scene, camera, renderer, plane, geometry1, geometry2, lerpAmount = 0;
+
+let audioContext, analyser, dataArray, bufferLength;
+
+const setupAudioAnalyzer = async () => {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    bufferLength = analyser.frequencyBinCount;
+    dataArray = new Uint8Array(bufferLength);
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        logFrequencyData();
+    } catch (err) {
+        console.error('Error accessing microphone:', err);
+    }
+};
+
+const logFrequencyData = () => {
+    requestAnimationFrame(logFrequencyData);
+
+ 
+    analyser.getByteFrequencyData(dataArray);
+    console.log('audio here please work', dataArray);
+};
 
 const init = () => {
     // Scene
@@ -97,10 +125,16 @@ const onWindowResize = () => {
 onMounted(() => {
     init();
     animate();
+    setupAudioAnalyzer();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', onWindowResize);
+    onBeforeUnmount(() => {
+        if (audioContext) {
+            audioContext.close();
+        }
+    });
 });
 </script>
 
