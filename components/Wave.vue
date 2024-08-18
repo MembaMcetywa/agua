@@ -24,18 +24,18 @@ const setupAudioAnalyzer = async () => {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const source = audioContext.createMediaStreamSource(stream);
         source.connect(analyser);
-        logFrequencyData();
+        animate();
     } catch (err) {
         console.error('Error accessing microphone:', err);
     }
 };
 
-const logFrequencyData = () => {
-    requestAnimationFrame(logFrequencyData);
-
- 
-    analyser.getByteFrequencyData(dataArray);
-    console.log('audio here please work', dataArray);
+const calculateAudioEnergy = () => {
+    let sum = 0;
+    for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+    }
+    return sum / bufferLength; // Average amplitude across all frequencies
 };
 
 const init = () => {
@@ -50,7 +50,8 @@ const init = () => {
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     sceneContainer.value.appendChild(renderer.domElement);
-    //shapes
+
+    // Geometry
     geometry1 = new THREE.PlaneGeometry(150, 150, 50, 50);
     geometry2 = new THREE.PlaneGeometry(150, 150, 50, 50);
 
@@ -82,39 +83,42 @@ const init = () => {
 
     // Resize event
     window.addEventListener('resize', onWindowResize, false);
-
-    
-    setInterval(() => {
-        isMorphingToSecondShape.value = !isMorphingToSecondShape.value;
-        lerpAmount = 0;
-    }, 5000);
 };
+
+let smoothedEnergy = 0; // Initialize smoothed energy
 
 const animate = () => {
     requestAnimationFrame(animate);
 
-    const positionAttribute1 = geometry1.attributes.position;
-    const positionAttribute2 = geometry2.attributes.position;
-    const positionAttributeCurrent = plane.geometry.attributes.position;
+    // Get frequency data
+    analyser.getByteFrequencyData(dataArray);
 
-    for (let i = 0; i < positionAttributeCurrent.count; i++) {
-        const z1 = positionAttribute1.getZ(i);
-        const z2 = positionAttribute2.getZ(i);
-        const zCurrent = THREE.MathUtils.lerp(z1, z2, lerpAmount);
+    // Calculate overall audio energy
+    const audioEnergy = calculateAudioEnergy();
 
-        positionAttributeCurrent.setZ(i, zCurrent);
+    // Smooth the audio energy to avoid abrupt changes
+    smoothedEnergy = smoothedEnergy * 0.8 + audioEnergy * 0.2;
+
+    const positionAttribute = plane.geometry.attributes.position;
+    for (let i = 0; i < positionAttribute.count; i++) {
+        const x = positionAttribute.getX(i);
+        const y = positionAttribute.getY(i);
+
+        const frequencyIndex = Math.floor((i / positionAttribute.count) * bufferLength);
+        const z = (dataArray[frequencyIndex] * 0.1) + (smoothedEnergy * 0.1);
+
+        positionAttribute.setZ(i, z);
     }
 
-    lerpAmount += 0.01;
-    if (lerpAmount >= 1) lerpAmount = 1; 
+    positionAttribute.needsUpdate = true;
 
-    positionAttributeCurrent.needsUpdate = true;
-
-    // Rotate the plane for a dynamic effect
-    plane.rotation.z += 0.001;
+    const rotationSpeed = 0.001 + (smoothedEnergy / 128) * 0.05;
+    plane.rotation.z += rotationSpeed;
 
     renderer.render(scene, camera);
 };
+
+
 
 const onWindowResize = () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -124,17 +128,14 @@ const onWindowResize = () => {
 
 onMounted(() => {
     init();
-    animate();
     setupAudioAnalyzer();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', onWindowResize);
-    onBeforeUnmount(() => {
-        if (audioContext) {
-            audioContext.close();
-        }
-    });
+    if (audioContext) {
+        audioContext.close();
+    }
 });
 </script>
 
