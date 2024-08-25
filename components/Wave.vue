@@ -1,5 +1,10 @@
 <template>
-    <div ref="sceneContainer" class="scene-container"></div>
+    <div>
+        <div ref="sceneContainer" class="scene-container"></div>
+        <div v-if="!audioContext" class="start-message">
+            Click anywhere to start visualising sound
+        </div>
+    </div>
 </template>
 
 <script setup>
@@ -11,12 +16,16 @@ let scene1, scene2, camera, renderer, plane1, plane2;
 let currentScene = 1;
 
 let audioContext, analyser, dataArray, bufferLength;
-let smoothedEnergy = 0;
+let smoothedBass = 0, smoothedMid = 0, smoothedTreble = 0;
 
 const setupAudioAnalyzer = async () => {
+    if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+    }
+
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
+    analyser.fftSize = 2048;  // Increased for better frequency resolution
     bufferLength = analyser.frequencyBinCount;
     dataArray = new Uint8Array(bufferLength);
 
@@ -27,15 +36,44 @@ const setupAudioAnalyzer = async () => {
         animate();
     } catch (err) {
         console.error('Error accessing microphone:', err);
+        // Fallback: use demo audio file
+        // useDemoAudio();
     }
 };
 
-const calculateAudioEnergy = () => {
-    let sum = 0;
+const useDemoAudio = async () => {
+    const audio = new Audio('/path/to/demo/audio.mp3');
+    const source = audioContext.createMediaElementSource(audio);
+    source.connect(analyser);
+    source.connect(audioContext.destination);
+    audio.play();
+};
+
+const calculateAudioLevels = () => {
+    analyser.getByteFrequencyData(dataArray);
+
+
+    const bassEnd = Math.floor(bufferLength * 0.1);
+    const midEnd = Math.floor(bufferLength * 0.5);
+
+    let bassSum = 0, midSum = 0, trebleSum = 0;
+
     for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
+        if (i < bassEnd) bassSum += dataArray[i];
+        else if (i < midEnd) midSum += dataArray[i];
+        else trebleSum += dataArray[i];
     }
-    return sum / bufferLength;
+
+    const bassLevel = bassSum / bassEnd;
+    const midLevel = midSum / (midEnd - bassEnd);
+    const trebleLevel = trebleSum / (bufferLength - midEnd);
+
+    // Apply smoothing
+    smoothedBass = smoothedBass * 0.8 + bassLevel * 0.2;
+    smoothedMid = smoothedMid * 0.8 + midLevel * 0.2;
+    smoothedTreble = smoothedTreble * 0.8 + trebleLevel * 0.2;
+
+    return { bass: smoothedBass, mid: smoothedMid, treble: smoothedTreble };
 };
 
 const init = () => {
@@ -52,6 +90,7 @@ const init = () => {
     plane1 = new THREE.Mesh(geometry1, material1);
     scene1.add(plane1);
 
+    // Scene 2
     scene2 = new THREE.Scene();
     const geometry2 = new THREE.PlaneGeometry(150, 150, 50, 50);
     const material2 = new THREE.MeshStandardMaterial({
@@ -104,19 +143,24 @@ let transitionSpeed = 0.02;
 const animate = () => {
     requestAnimationFrame(animate);
 
-    // Get frequency data
-    analyser.getByteFrequencyData(dataArray);
-
-    const audioEnergy = calculateAudioEnergy();
-
-    smoothedEnergy = smoothedEnergy * 0.8 + audioEnergy * 0.2;
+    const { bass, mid, treble } = calculateAudioLevels();
 
     const positionAttribute1 = plane1.geometry.attributes.position;
     const positionAttribute2 = plane2.geometry.attributes.position;
 
     for (let i = 0; i < positionAttribute1.count; i++) {
-        const frequencyIndex = Math.floor((i / positionAttribute1.count) * bufferLength);
-        const z = (dataArray[frequencyIndex] * 0.1) + (smoothedEnergy * 0.1);
+        const x = positionAttribute1.getX(i);
+        const y = positionAttribute1.getY(i);
+
+        // Use different frequency ranges for different areas of the plane
+        let z;
+        if (Math.abs(x) < 50 && Math.abs(y) < 50) {
+            z = bass * 0.2;
+        } else if (Math.abs(x) < 100 && Math.abs(y) < 100) {
+            z = mid * 0.15;
+        } else {
+            z = treble * 0.1;
+        }
 
         positionAttribute1.setZ(i, z);
         positionAttribute2.setZ(i, z);
@@ -125,8 +169,8 @@ const animate = () => {
     positionAttribute1.needsUpdate = true;
     positionAttribute2.needsUpdate = true;
 
-    plane1.rotation.z += 0.001 + (smoothedEnergy / 128) * 0.05;
-    plane2.rotation.z += 0.001 + (smoothedEnergy / 128) * 0.05;
+    plane1.rotation.z += 0.001 + (bass / 128) * 0.05;
+    plane2.rotation.z += 0.001 + (bass / 128) * 0.05;
 
     // scene transition
     if (transitioning) {
@@ -157,10 +201,10 @@ const animate = () => {
 
     renderer.setScissorTest(false);
 
-    if (currentScene === 1 && smoothedEnergy > 50 && !transitioning) {
+    if (currentScene === 1 && bass > 100 && !transitioning) {
         transitioning = true;
         currentScene = 2;
-    } else if (currentScene === 2 && smoothedEnergy < 30 && !transitioning) {
+    } else if (currentScene === 2 && bass < 50 && !transitioning) {
         transitioning = true;
         currentScene = 1;
     }
@@ -172,13 +216,27 @@ const onWindowResize = () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 };
 
+const initAudioContext = () => {
+    if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        setupAudioAnalyzer();
+    }
+};
+
+const handleUserInteraction = () => {
+    initAudioContext();
+    // Remove the event listener after the first interaction
+    document.removeEventListener('click', handleUserInteraction);
+};
+
 onMounted(() => {
     init();
-    setupAudioAnalyzer();
+    document.addEventListener('click', handleUserInteraction)
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', onWindowResize);
+    document.removeEventListener('click', handleUserInteraction);
     if (audioContext) {
         audioContext.close();
     }
@@ -186,6 +244,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+
 .scene-container {
     position: absolute;
     top: 0;
@@ -193,5 +253,9 @@ onBeforeUnmount(() => {
     width: 100%;
     height: 100%;
     z-index: 0;
+}
+
+.start-message {
+    font-family: Poppins, sans-serif;
 }
 </style>
