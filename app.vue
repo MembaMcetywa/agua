@@ -36,6 +36,7 @@ main {
 
 header h1 {
   font-family: 'Barrio', cursive;
+  text-align: center;
   color: #EAA634;
   font-size: 4.5rem;
   position: relative;
