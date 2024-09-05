@@ -7,10 +7,6 @@
   </main>
 </template>
 
-<script lang="ts">
-import Wave from "./components/Wave.vue";
-</script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Barrio&family=Poppins&display=swap');
 
