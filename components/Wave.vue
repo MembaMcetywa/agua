@@ -324,9 +324,9 @@ const animate = () => {
 
     updateRipples(bass);
     if (waveInterferenceMesh) updateWaveInterference(performance.now() * 0.001, dataArray);
-    if(particleSystem)updateParticles(dataArray);
-    if(waterMesh)updateWaterEffect(performance.now() * 0.001, dataArray); 
-     if(water)updateWaterColor(bass, mid, treble);
+    if (particleSystem) updateParticles(dataArray);
+    if (waterMesh) updateWaterEffect(performance.now() * 0.001, dataArray);
+    if (water) updateWaterColor(bass, mid, treble);
 
     const positionAttribute1 = plane1.geometry.attributes.position;
     const positionAttribute2 = plane2.geometry.attributes.position;
@@ -335,7 +335,6 @@ const animate = () => {
         const x = positionAttribute1.getX(i);
         const y = positionAttribute1.getY(i);
 
-        // ifferent frequency ranges for different areas of the plane
         let z;
         if (Math.abs(x) < 50 && Math.abs(y) < 50) {
             z = bass * 0.2;
@@ -355,7 +354,6 @@ const animate = () => {
     plane1.rotation.z += 0.001 + (bass / 128) * 0.05;
     plane2.rotation.z += 0.001 + (bass / 128) * 0.05;
 
-    // scene transition
     if (transitioning) {
         blendFactor += transitionSpeed;
         if (blendFactor >= 1) {
@@ -371,7 +369,6 @@ const animate = () => {
 
     const easedBlend = easeInOutQuad(blendFactor);
 
-    // Render the blended scene
     renderer.autoClear = false;
     renderer.clear();
     renderer.setScissorTest(true);
@@ -384,7 +381,7 @@ const animate = () => {
 
     renderer.setScissorTest(false);
 
-    if (currentScene === 1 && bass > 100 && !transitioning) {
+    if (currentScene === 1 && bass > 120 && !transitioning) {
         transitioning = true;
         currentScene = 2;
     } else if (currentScene === 2 && bass < 50 && !transitioning) {
